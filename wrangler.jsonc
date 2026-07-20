@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stock-volume-tracker",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-19",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stock-volume-tracker",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+    }
+  ],
+  "vars": {
+    "TWELVE_DATA_BASE_URL": "https://api.twelvedata.com",
+    "FROM_NAME": "Stock Volume Alert"
+  },
+  "triggers": {
+    "crons": [
+      "15 20 * * 1-5",
+      "15 21 * * 1-5"
+    ]
+  }
+}
