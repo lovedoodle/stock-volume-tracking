@@ -15,6 +15,11 @@ interface VolumeComparison {
   ratio: number;
 }
 
+interface WatchlistItem {
+  symbol: string;
+  price: number | null;
+}
+
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stock Volume Alert</title><style>
@@ -25,7 +30,7 @@ const PAGE = `<!doctype html>
 <script>
 const list=document.querySelector('#list'),input=document.querySelector('#symbol'),message=document.querySelector('#message');
 function tell(text,kind=''){message.textContent=text;message.className=kind}
-async function load(){const r=await fetch('/api/watchlist');const {symbols}=await r.json();list.innerHTML='';if(!symbols.length){list.innerHTML='<li><span>No tickers yet.</span></li>';return}for(const symbol of symbols){const li=document.createElement('li'),label=document.createElement('span'),button=document.createElement('button');label.textContent=symbol;button.textContent='Remove';button.className='remove';button.onclick=async()=>{await fetch('/api/watchlist/'+encodeURIComponent(symbol),{method:'DELETE'});tell(symbol+' removed.','success');load()};li.append(label,button);list.append(li)}}
+async function load(){const r=await fetch('/api/watchlist');const {items=[]}=await r.json();list.innerHTML='';if(!items.length){list.innerHTML='<li><span>No tickers yet.</span></li>';return}for(const item of items){const {symbol,price}=item,li=document.createElement('li'),label=document.createElement('span'),button=document.createElement('button');label.textContent=price===null?symbol+' — Price unavailable':symbol+' — $'+Number(price).toFixed(2);button.textContent='Remove';button.className='remove';button.onclick=async()=>{await fetch('/api/watchlist/'+encodeURIComponent(symbol),{method:'DELETE'});tell(symbol+' removed.','success');load()};li.append(label,button);list.append(li)}}
 async function add(){const symbol=input.value.trim().toUpperCase();if(!symbol)return;const r=await fetch('/api/watchlist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({symbol})});const data=await r.json();if(!r.ok){tell(data.error||'Unable to add ticker.','error');return}input.value='';tell(data.added?symbol+' added.':symbol+' is already on the watchlist.','success');load()}
 document.querySelector('#add').onclick=add;input.addEventListener('keydown',e=>{if(e.key==='Enter')add()});load();
 </script></body></html>`;
@@ -35,7 +40,11 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/') return html(PAGE);
     if (url.pathname === '/api/watchlist') {
-      if (request.method === 'GET') return json({ symbols: (await env.DB.prepare('SELECT symbol FROM watchlist ORDER BY symbol').all<{ symbol: string }>()).results.map((row) => row.symbol) });
+      if (request.method === 'GET') {
+        const symbols = (await env.DB.prepare('SELECT symbol FROM watchlist ORDER BY symbol').all<{ symbol: string }>()).results.map((row) => row.symbol);
+        const items = await Promise.all(symbols.map(async (symbol): Promise<WatchlistItem> => ({ symbol, price: await latestPrice(symbol, env) })));
+        return json({ items });
+      }
       if (request.method === 'POST') return addTicker(request, env);
     }
     if (request.method === 'DELETE' && url.pathname.startsWith('/api/watchlist/')) return removeTicker(decodeURIComponent(url.pathname.slice('/api/watchlist/'.length)), env);
@@ -90,6 +99,16 @@ async function volumeComparison(symbol: string, env: Env): Promise<VolumeCompari
   if (!Number.isFinite(latest) || prior.some((value) => !Number.isFinite(value))) return null;
   const average = prior.reduce((sum, value) => sum + value, 0) / prior.length;
   return { symbol, latest, average, ratio: latest / average };
+}
+
+async function latestPrice(symbol: string, env: Env): Promise<number | null> {
+  if (!env.TWELVE_DATA_API_KEY) return null;
+  const endpoint = new URL('/price', env.TWELVE_DATA_BASE_URL);
+  endpoint.search = new URLSearchParams({ symbol, apikey: env.TWELVE_DATA_API_KEY }).toString();
+  const response = await fetch(endpoint);
+  const data = await response.json() as { price?: string };
+  const price = Number(data.price);
+  return response.ok && Number.isFinite(price) ? price : null;
 }
 
 async function sendEmail(items: VolumeComparison[], runDate: string, env: Env): Promise<void> {
