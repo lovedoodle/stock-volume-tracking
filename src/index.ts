@@ -20,26 +20,10 @@ interface WatchlistItem {
   price: number | null;
 }
 
-const PAGE = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Stock Volume Alert</title><style>
-:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#e5e7eb;background:#111827}body{max-width:760px;margin:0 auto;padding:48px 20px}h1{margin-bottom:6px}p{color:#9ca3af}.card{background:#1f2937;border:1px solid #374151;border-radius:12px;padding:20px;margin-top:24px}.row{display:flex;gap:10px}.row input{flex:1;padding:11px;border-radius:8px;border:1px solid #4b5563;background:#111827;color:#fff;font-size:16px}button{padding:10px 14px;border:0;border-radius:8px;background:#22c55e;color:#052e16;font-weight:700;cursor:pointer}button.remove{background:#374151;color:#e5e7eb}li{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #374151;font-weight:600}li:last-child{border:0}.hint,#message{font-size:14px}.error{color:#fca5a5}.success{color:#86efac}</style></head>
-<body><h1>Stock Volume Alert</h1><p>Add U.S. tickers to receive an email when daily volume reaches 1.5&times; the prior five-day average.</p>
-<section class="card"><div class="row"><input id="symbol" placeholder="Ticker, e.g. AAPL" maxlength="15"><button id="add">Add ticker</button></div><p id="message" role="status"></p><p class="hint">The check runs at 4:15 PM Eastern on trading days. No email is sent when nothing qualifies.</p></section>
-<section class="card"><h2>Watchlist</h2><ul id="list"></ul></section>
-<script>
-const list=document.querySelector('#list'),input=document.querySelector('#symbol'),message=document.querySelector('#message');
-function tell(text,kind=''){message.textContent=text;message.className=kind}
-async function load(){const r=await fetch('/api/watchlist');const {items=[]}=await r.json();list.innerHTML='';if(!items.length){list.innerHTML='<li><span>No tickers yet.</span></li>';return}for(const item of items){const {symbol,price}=item,li=document.createElement('li'),label=document.createElement('span'),button=document.createElement('button');label.textContent=price===null?symbol+' — Price unavailable':symbol+' — $'+Number(price).toFixed(2);button.textContent='Remove';button.className='remove';button.onclick=async()=>{await fetch('/api/watchlist/'+encodeURIComponent(symbol),{method:'DELETE'});tell(symbol+' removed.','success');load()};li.append(label,button);list.append(li)}}
-async function add(){const symbol=input.value.trim().toUpperCase();if(!symbol)return;const r=await fetch('/api/watchlist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({symbol})});const data=await r.json();if(!r.ok){tell(data.error||'Unable to add ticker.','error');return}input.value='';tell(data.added?symbol+' added.':symbol+' is already on the watchlist.','success');load()}
-document.querySelector('#add').onclick=add;input.addEventListener('keydown',e=>{if(e.key==='Enter')add()});load();
-</script></body></html>`;
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-    if (request.method === 'GET' && url.pathname === '/') return html(PAGE);
     if (url.pathname === '/api/watchlist') {
       if (request.method === 'GET') {
         const symbols = (await env.DB.prepare('SELECT symbol FROM watchlist ORDER BY symbol').all<{ symbol: string }>()).results.map((row) => row.symbol);
@@ -124,4 +108,3 @@ function isNewYork415(timestamp: number) { const parts = new Intl.DateTimeFormat
 function format(value: number) { return new Intl.NumberFormat('en-US').format(Math.round(value)); }
 const corsHeaders = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type' };
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders } }); }
-function html(body: string) { return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } }); }
