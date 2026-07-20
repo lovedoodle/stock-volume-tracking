@@ -7,17 +7,14 @@
     {
       "binding": "DB",
       "database_name": "stock-volume-tracker",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
-    }
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+    },
   ],
   "vars": {
     "TWELVE_DATA_BASE_URL": "https://api.twelvedata.com",
-    "FROM_NAME": "Stock Volume Alert"
+    "FROM_NAME": "Stock Volume Alert",
   },
   "triggers": {
-    "crons": [
-      "15 20 * * 1-5",
-      "15 21 * * 1-5"
-    ]
-  }
+    "crons": ["15 20 * * 1-5", "15 21 * * 1-5"],
+  },
 }
