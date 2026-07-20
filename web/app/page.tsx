@@ -179,8 +179,8 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 shadow-xl shadow-black/10">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-5 sm:px-7">
+        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/60 shadow-xl shadow-black/10">
+          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-5 sm:px-7">
             <div>
               <h2 className="font-semibold text-white">Your watchlist</h2>
               <p className="mt-1 text-sm text-slate-400">
@@ -212,7 +212,7 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-white/10">
+            <div className="divide-y divide-slate-800">
               {items.map((item) => (
                 <article
                   key={item.symbol}
