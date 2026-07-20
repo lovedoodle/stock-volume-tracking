@@ -10,13 +10,10 @@ import {
   type WatchlistItem,
 } from '../lib/api';
 
-type Notice = {
-  message: string;
-  tone: 'error' | 'success';
-};
+type Notice = { message: string; tone: 'error' | 'success' };
 
 function formatPrice(price: number | null) {
-  return price === null ? '—' : `$${price.toFixed(2)}`;
+  return price === null ? 'Price unavailable' : `$${price.toFixed(2)}`;
 }
 
 export default function Home() {
@@ -24,225 +21,147 @@ export default function Home() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const {
     data: items = [],
-    error: watchlistError,
+    error,
     isLoading,
-    isValidating,
-    mutate: refreshWatchlist,
+    mutate: mutateWatchlist,
   } = useSWR('watchlist', getWatchlist);
-  const { trigger: addTickerRequest, isMutating: isAdding } = useSWRMutation(
+  const { trigger: addTicker, isMutating: isAdding } = useSWRMutation(
     'watchlist/add',
     (_, { arg }: { arg: string }) => addWatchlistTicker(arg),
   );
-  const { trigger: removeTickerRequest, isMutating: isRemoving } = useSWRMutation(
+  const { trigger: removeTicker, isMutating: isRemoving } = useSWRMutation(
     'watchlist/remove',
     (_, { arg }: { arg: string }) => removeWatchlistTicker(arg),
   );
   const activeNotice =
-    notice ?? (watchlistError ? { message: watchlistError.message, tone: 'error' as const } : null);
+    notice ?? (error ? { message: error.message, tone: 'error' as const } : null);
 
-  const addTicker = async (event: FormEvent<HTMLFormElement>) => {
+  async function handleAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextSymbol = symbol.trim();
-
-    if (!nextSymbol) return;
+    const ticker = symbol.trim();
+    if (!ticker) return;
 
     setNotice(null);
-
     try {
-      const data = await addTickerRequest(nextSymbol);
-
+      const result = await addTicker(ticker);
+      setSymbol('');
       setNotice({
-        message: data.added
-          ? `${data.symbol} added to your watchlist.`
-          : `${data.symbol} is already tracked.`,
+        message: result.added ? `${result.symbol} added.` : `${result.symbol} is already tracked.`,
         tone: 'success',
       });
-      setSymbol('');
-      void refreshWatchlist(
+      await mutateWatchlist(
         (currentItems: WatchlistItem[] = []) =>
-          data.added ? [...currentItems, { symbol: data.symbol, price: null }] : currentItems,
+          result.added ? [...currentItems, { symbol: result.symbol, price: null }] : currentItems,
         { revalidate: true },
       );
-    } catch (error) {
+    } catch (caughtError) {
       setNotice({
-        message: error instanceof Error ? error.message : 'Unable to add ticker.',
+        message: caughtError instanceof Error ? caughtError.message : 'Unable to add ticker.',
         tone: 'error',
       });
     }
-  };
+  }
 
-  const removeTicker = async (ticker: string) => {
+  async function handleRemove(ticker: string) {
     setNotice(null);
-
     try {
-      await removeTickerRequest(ticker);
-
-      setNotice({ message: `${ticker} removed from your watchlist.`, tone: 'success' });
-      await refreshWatchlist();
-    } catch (error) {
+      await removeTicker(ticker);
+      await mutateWatchlist((currentItems: WatchlistItem[] = []) =>
+        currentItems.filter((item) => item.symbol !== ticker),
+      );
+    } catch (caughtError) {
       setNotice({
-        message: error instanceof Error ? error.message : 'Unable to remove ticker.',
+        message: caughtError instanceof Error ? caughtError.message : 'Unable to remove ticker.',
         tone: 'error',
       });
     }
-  };
+  }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.18),_transparent_42%)]" />
-      <div className="relative mx-auto max-w-5xl px-5 py-8 sm:px-8 sm:py-12">
-        <header className="flex items-center justify-between border-b border-white/10 pb-6">
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl bg-emerald-400 font-black text-slate-950 shadow-lg shadow-emerald-500/20">
-              V
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-tight text-white">Volume Watch</p>
-              <p className="text-xs text-slate-400">Personal market monitor</p>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
-            <span className="size-1.5 rounded-full bg-emerald-300" />
-            Daily scan enabled
-          </span>
+    <main className="min-h-screen bg-gradient-to-b from-sky-50 to-slate-100 px-4 py-10 text-slate-900">
+      <div className="mx-auto max-w-xl">
+        <header className="border-l-4 border-sky-500 pl-4">
+          <p className="text-xs font-semibold tracking-widest text-sky-700 uppercase">
+            Volume Watch
+          </p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
+            Stock Volume Alert
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Get an email when a ticker reaches 1.5× its five-day average volume.
+          </p>
         </header>
 
-        <section className="grid gap-8 py-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-          <div>
-            <p className="mb-4 text-xs font-bold tracking-[0.22em] text-emerald-300 uppercase">
-              U.S. stock volume alerts
+        <form
+          onSubmit={handleAdd}
+          className="mt-8 flex gap-2 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200"
+        >
+          <label className="sr-only" htmlFor="ticker">
+            Ticker symbol
+          </label>
+          <input
+            id="ticker"
+            value={symbol}
+            onChange={(event) => setSymbol(event.target.value.toUpperCase())}
+            placeholder="AAPL"
+            maxLength={15}
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+          />
+          <button
+            type="submit"
+            disabled={isAdding || !symbol.trim()}
+            className="rounded-lg bg-sky-600 px-4 py-2 font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
+          >
+            {isAdding ? 'Adding…' : 'Add'}
+          </button>
+        </form>
+
+        <div className="mt-3 min-h-5 text-sm" aria-live="polite">
+          {activeNotice && (
+            <p className={activeNotice.tone === 'success' ? 'text-emerald-700' : 'text-red-700'}>
+              {activeNotice.message}
             </p>
-            <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Know when volume moves.
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-slate-300">
-              We scan your watchlist after the market closes and email you when a ticker reaches at
-              least 1.5× its five-day average volume.
-            </p>
-          </div>
+          )}
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
-              <p className="text-xs font-medium text-slate-400">Tickers tracked</p>
-              <p className="mt-2 text-3xl font-semibold text-white">{items.length}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
-              <p className="text-xs font-medium text-slate-400">Alert threshold</p>
-              <p className="mt-2 text-3xl font-semibold text-white">1.5×</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-emerald-400/20 bg-slate-900/80 p-5 shadow-2xl shadow-black/20 backdrop-blur sm:p-7">
-          <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Add to watchlist</h2>
-              <p className="text-sm text-slate-400">
-                Use a U.S. ticker symbol, such as AAPL or NVDA.
-              </p>
-            </div>
-            <p className="text-xs font-medium text-emerald-300">Checks run after 4:15 PM ET</p>
-          </div>
-          <form onSubmit={addTicker} className="flex flex-col gap-3 sm:flex-row">
-            <label className="sr-only" htmlFor="ticker">
-              Ticker symbol
-            </label>
-            <input
-              id="ticker"
-              value={symbol}
-              onChange={(event) => setSymbol(event.target.value.toUpperCase())}
-              placeholder="Enter ticker symbol"
-              maxLength={15}
-              className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3.5 font-medium text-white transition outline-none placeholder:text-slate-500 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10"
-            />
-            <button
-              type="submit"
-              disabled={isAdding || !symbol.trim()}
-              className="rounded-xl bg-emerald-400 px-5 py-3.5 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isAdding ? 'Adding…' : 'Add ticker'}
-            </button>
-          </form>
-          <div className="mt-4 min-h-10" aria-live="polite">
-            {activeNotice && (
-              <p
-                className={`rounded-lg px-3 py-2 text-sm ${
-                  activeNotice.tone === 'success'
-                    ? 'bg-emerald-400/10 text-emerald-200'
-                    : 'bg-rose-400/10 text-rose-200'
-                }`}
-                role="status"
-              >
-                {activeNotice.message}
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/60 shadow-xl shadow-black/10">
-          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-5 sm:px-7">
-            <div>
-              <h2 className="font-semibold text-white">Your watchlist</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Latest available trading price for each symbol.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void refreshWatchlist()}
-              disabled={isValidating}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
-            >
-              {isValidating ? 'Refreshing…' : 'Refresh'}
-            </button>
+        <section className="mt-6 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+          <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
+            <h2 className="font-semibold">Watchlist</h2>
+            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm">
+              {items.length} tickers
+            </span>
           </div>
 
           {isLoading ? (
-            <div className="px-5 py-14 text-center text-sm text-slate-400 sm:px-7">
-              Loading watchlist…
-            </div>
+            <p className="px-4 py-6 text-sm text-slate-500">Loading…</p>
           ) : items.length === 0 ? (
-            <div className="px-5 py-14 text-center sm:px-7">
-              <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/5 text-xl text-slate-300">
-                +
-              </div>
-              <h3 className="mt-4 font-medium text-white">Your watchlist is empty</h3>
-              <p className="mt-1 text-sm text-slate-400">
-                Add your first ticker above to start monitoring volume.
-              </p>
-            </div>
+            <p className="px-4 py-6 text-sm text-slate-500">No tickers yet.</p>
           ) : (
-            <div className="divide-y divide-slate-800">
-              {items.map((item) => (
-                <article
+            <ul>
+              {items.map((item, index) => (
+                <li
                   key={item.symbol}
-                  className="flex items-center gap-4 px-5 py-4 transition hover:bg-white/[0.03] sm:px-7"
+                  className={`flex items-center justify-between gap-4 px-4 py-3 ${
+                    index > 0 ? 'border-t border-slate-200' : ''
+                  }`}
                 >
-                  <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-800 font-bold text-emerald-300">
-                    {item.symbol.slice(0, 1)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold tracking-wide text-white">{item.symbol}</h3>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {item.price === null
-                        ? 'Price currently unavailable'
-                        : 'Latest available price'}
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {item.symbol}{' '}
+                      <span className="font-normal text-slate-500">{formatPrice(item.price)}</span>
                     </p>
                   </div>
-                  <p className="hidden text-right text-lg font-semibold text-white tabular-nums sm:block">
-                    {formatPrice(item.price)}
-                  </p>
                   <button
                     type="button"
-                    onClick={() => void removeTicker(item.symbol)}
+                    onClick={() => void handleRemove(item.symbol)}
                     disabled={isRemoving}
-                    className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-rose-400/70 hover:bg-rose-400/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded px-2 py-1 text-sm text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                   >
                     Remove
                   </button>
-                </article>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </section>
       </div>
