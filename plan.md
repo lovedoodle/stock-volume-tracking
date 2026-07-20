@@ -17,7 +17,8 @@ Deploy a simple personal web app that watches U.S. stocks and emails a daily ale
 
 ## Stack
 
-- **App, API, scheduler, database:** Cloudflare Workers + D1 free tier
+- **Frontend:** Next.js (App Router), TypeScript, and Tailwind CSS
+- **API, scheduler, database:** Cloudflare Workers + D1 free tier
 - **Market data:** Twelve Data free tier
 - **Email:** Brevo free tier
 
@@ -27,6 +28,12 @@ Deploy a simple personal web app that watches U.S. stocks and emails a daily ale
 - The data provider's free-tier limits define practical watchlist capacity.
 - The alert calculation is deterministic; an LLM is not required for the MVP.
 
+## Current implementation
+
+- Next.js watchlist UI supports adding/removing tickers and displays each ticker's latest price when available.
+- The Worker exposes the watchlist API, persists it in D1, checks volumes on schedule, and sends the combined Brevo email.
+- The frontend and Worker run locally as separate processes; production deployment remains to be configured.
+
 ## Next
 
-Build the web UI, volume-check job, email summary, and cloud deployment.
+Configure Cloudflare, Twelve Data, and Brevo credentials, then deploy the Worker and frontend for a public demo.
