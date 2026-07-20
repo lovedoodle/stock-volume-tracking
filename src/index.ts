@@ -38,6 +38,7 @@ document.querySelector('#add').onclick=add;input.addEventListener('keydown',e=>{
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
     if (request.method === 'GET' && url.pathname === '/') return html(PAGE);
     if (url.pathname === '/api/watchlist') {
       if (request.method === 'GET') {
@@ -121,5 +122,6 @@ async function sendEmail(items: VolumeComparison[], runDate: string, env: Env): 
 function updateRun(env: Env, runDate: string, status: string) { return env.DB.prepare('UPDATE daily_runs SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE run_date = ?').bind(status, runDate).run(); }
 function isNewYork415(timestamp: number) { const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).formatToParts(new Date(timestamp)); const value = Object.fromEntries(parts.map((part) => [part.type, part.value])); return !['Sat', 'Sun'].includes(value.weekday) && value.hour === '16' && value.minute === '15'; }
 function format(value: number) { return new Intl.NumberFormat('en-US').format(Math.round(value)); }
-function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }); }
+const corsHeaders = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type' };
+function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders } }); }
 function html(body: string) { return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } }); }
