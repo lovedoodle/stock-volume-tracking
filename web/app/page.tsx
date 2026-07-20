@@ -1,53 +1,37 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
-
-type WatchlistItem = {
-  symbol: string;
-  price: number | null;
-};
+import { FormEvent, useState } from 'react';
+import useSWR from 'swr';
+import useSWRMutation from 'swr/mutation';
+import { addWatchlistTicker, getWatchlist, removeWatchlistTicker } from '../lib/api';
 
 type Notice = {
   message: string;
   tone: 'error' | 'success';
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8787';
-
 function formatPrice(price: number | null) {
   return price === null ? '—' : `$${price.toFixed(2)}`;
 }
 
 export default function Home() {
-  const [items, setItems] = useState<WatchlistItem[]>([]);
   const [symbol, setSymbol] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const loadWatchlist = async () => {
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(`${apiBase}/api/watchlist`);
-      const data = (await response.json()) as { items?: WatchlistItem[]; error?: string };
-
-      if (!response.ok) throw new Error(data.error ?? 'Unable to load the watchlist.');
-
-      setItems(data.items ?? []);
-    } catch (error) {
-      setNotice({
-        message: error instanceof Error ? error.message : 'Unable to load the watchlist.',
-        tone: 'error',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadWatchlist();
-  }, []);
+  const {
+    data: items = [],
+    error: watchlistError,
+    isLoading,
+    isValidating,
+    mutate: refreshWatchlist,
+  } = useSWR('watchlist', getWatchlist);
+  const { trigger: addTickerRequest, isMutating: isAdding } = useSWRMutation(
+    'watchlist/add',
+    (_, { arg }: { arg: string }) => addWatchlistTicker(arg),
+  );
+  const { trigger: removeTickerRequest, isMutating: isRemoving } = useSWRMutation(
+    'watchlist/remove',
+    (_, { arg }: { arg: string }) => removeWatchlistTicker(arg),
+  );
 
   const addTicker = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,18 +39,10 @@ export default function Home() {
 
     if (!nextSymbol) return;
 
-    setIsSubmitting(true);
     setNotice(null);
 
     try {
-      const response = await fetch(`${apiBase}/api/watchlist`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ symbol: nextSymbol }),
-      });
-      const data = (await response.json()) as { added?: boolean; error?: string; symbol?: string };
-
-      if (!response.ok) throw new Error(data.error ?? 'Unable to add ticker.');
+      const data = await addTickerRequest(nextSymbol);
 
       setNotice({
         message: data.added
@@ -75,14 +51,12 @@ export default function Home() {
         tone: 'success',
       });
       setSymbol('');
-      await loadWatchlist();
+      await refreshWatchlist();
     } catch (error) {
       setNotice({
         message: error instanceof Error ? error.message : 'Unable to add ticker.',
         tone: 'error',
       });
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -90,12 +64,10 @@ export default function Home() {
     setNotice(null);
 
     try {
-      const response = await fetch(`${apiBase}/api/watchlist/${ticker}`, { method: 'DELETE' });
-
-      if (!response.ok) throw new Error('Unable to remove ticker.');
+      await removeTickerRequest(ticker);
 
       setNotice({ message: `${ticker} removed from your watchlist.`, tone: 'success' });
-      await loadWatchlist();
+      await refreshWatchlist();
     } catch (error) {
       setNotice({
         message: error instanceof Error ? error.message : 'Unable to remove ticker.',
@@ -174,10 +146,10 @@ export default function Home() {
             />
             <button
               type="submit"
-              disabled={isSubmitting || !symbol.trim()}
+              disabled={isAdding || !symbol.trim()}
               className="rounded-xl bg-emerald-400 px-5 py-3.5 font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? 'Adding…' : 'Add ticker'}
+              {isAdding ? 'Adding…' : 'Add ticker'}
             </button>
           </form>
           {notice && (
@@ -192,6 +164,14 @@ export default function Home() {
               {notice.message}
             </p>
           )}
+          {watchlistError && !notice && (
+            <p
+              className="mt-4 rounded-lg bg-rose-400/10 px-3 py-2 text-sm text-rose-200"
+              role="status"
+            >
+              {watchlistError.message}
+            </p>
+          )}
         </section>
 
         <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 shadow-xl shadow-black/10">
@@ -204,11 +184,11 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => void loadWatchlist()}
-              disabled={isLoading}
+              onClick={() => void refreshWatchlist()}
+              disabled={isValidating}
               className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
             >
-              {isLoading ? 'Refreshing…' : 'Refresh'}
+              {isValidating ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
 
@@ -250,7 +230,8 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => void removeTicker(item.symbol)}
-                    className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-rose-400/70 hover:bg-rose-400/10 hover:text-rose-200"
+                    disabled={isRemoving}
+                    className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-rose-400/70 hover:bg-rose-400/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Remove
                   </button>

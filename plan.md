@@ -34,6 +34,11 @@ Deploy a simple personal web app that watches U.S. stocks and emails a daily ale
 - The Worker exposes the watchlist API, persists it in D1, checks volumes on schedule, and sends the combined Brevo email.
 - The frontend and Worker run locally as separate processes; production deployment remains to be configured.
 
+## Engineering requirements
+
+- All browser-to-API requests must use **SWR** (`useSWR` for reads and `useSWRMutation` for writes); do not call `fetch` directly from React components.
+- Before every commit, run and pass ESLint, TypeScript (`tsc --noEmit`), and Prettier checks.
+
 ## Next
 
 Configure Cloudflare, Twelve Data, and Brevo credentials, then deploy the Worker and frontend for a public demo.
