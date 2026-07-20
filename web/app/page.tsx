@@ -3,7 +3,12 @@
 import { FormEvent, useState } from 'react';
 import useSWR from 'swr';
 import useSWRMutation from 'swr/mutation';
-import { addWatchlistTicker, getWatchlist, removeWatchlistTicker } from '../lib/api';
+import {
+  addWatchlistTicker,
+  getWatchlist,
+  removeWatchlistTicker,
+  type WatchlistItem,
+} from '../lib/api';
 
 type Notice = {
   message: string;
@@ -32,6 +37,8 @@ export default function Home() {
     'watchlist/remove',
     (_, { arg }: { arg: string }) => removeWatchlistTicker(arg),
   );
+  const activeNotice =
+    notice ?? (watchlistError ? { message: watchlistError.message, tone: 'error' as const } : null);
 
   const addTicker = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -51,7 +58,11 @@ export default function Home() {
         tone: 'success',
       });
       setSymbol('');
-      await refreshWatchlist();
+      void refreshWatchlist(
+        (currentItems: WatchlistItem[] = []) =>
+          data.added ? [...currentItems, { symbol: data.symbol, price: null }] : currentItems,
+        { revalidate: true },
+      );
     } catch (error) {
       setNotice({
         message: error instanceof Error ? error.message : 'Unable to add ticker.',
@@ -152,26 +163,20 @@ export default function Home() {
               {isAdding ? 'Adding…' : 'Add ticker'}
             </button>
           </form>
-          {notice && (
-            <p
-              className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-                notice.tone === 'success'
-                  ? 'bg-emerald-400/10 text-emerald-200'
-                  : 'bg-rose-400/10 text-rose-200'
-              }`}
-              role="status"
-            >
-              {notice.message}
-            </p>
-          )}
-          {watchlistError && !notice && (
-            <p
-              className="mt-4 rounded-lg bg-rose-400/10 px-3 py-2 text-sm text-rose-200"
-              role="status"
-            >
-              {watchlistError.message}
-            </p>
-          )}
+          <div className="mt-4 min-h-10" aria-live="polite">
+            {activeNotice && (
+              <p
+                className={`rounded-lg px-3 py-2 text-sm ${
+                  activeNotice.tone === 'success'
+                    ? 'bg-emerald-400/10 text-emerald-200'
+                    : 'bg-rose-400/10 text-rose-200'
+                }`}
+                role="status"
+              >
+                {activeNotice.message}
+              </p>
+            )}
+          </div>
         </section>
 
         <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 shadow-xl shadow-black/10">
